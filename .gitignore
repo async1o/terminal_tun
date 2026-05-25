@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+
+# Local runtime state, if TERMINAL_TUN_HOME points into the repo.
+state.json
+sing-box.json
+bin/

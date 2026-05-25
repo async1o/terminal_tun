@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "terminal-tun"
+version = "0.1.0"
+description = "A terminal subscription and routing manager for sing-box TUN proxy setups."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "terminal-tun contributors" }]
+keywords = ["proxy", "vpn", "tun", "sing-box", "cli"]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: Proxy Servers",
+  "Topic :: System :: Networking"
+]
+
+[project.scripts]
+terminal-tun = "terminal_tun.cli:main"
+ttun = "terminal_tun.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["terminal_tun*"]
