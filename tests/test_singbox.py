@@ -21,7 +21,9 @@ class SingBoxConfigTests(unittest.TestCase):
 
         config = generate_config(state, target_platform="linux")
 
-        self.assertEqual(config["dns"]["final"], "cloudflare")
+        self.assertEqual(config["dns"]["final"], "local")
+        self.assertTrue(any(server["type"] == "local" and server["tag"] == "local" for server in config["dns"]["servers"]))
+        self.assertTrue(any(server["type"] == "tcp" and server["tag"] == "cloudflare" for server in config["dns"]["servers"]))
         self.assertEqual(config["route"]["default_domain_resolver"], "cloudflare")
         self.assertEqual(config["route"]["final"], "direct")
         self.assertTrue(config["route"]["find_process"])
@@ -32,6 +34,7 @@ class SingBoxConfigTests(unittest.TestCase):
         self.assertTrue(
             any(rule.get("domain_suffix") == ["example.com"] and rule["outbound"] == "node" for rule in config["route"]["rules"])
         )
+        self.assertIn({"domain_suffix": ["example.com"], "server": "cloudflare"}, config["dns"]["rules"])
         self.assertTrue(any(inbound["type"] == "tun" and inbound.get("auto_redirect") is True for inbound in config["inbounds"]))
 
     def test_generate_config_normalizes_saved_reality_nodes(self):

@@ -44,26 +44,32 @@ def generate_config(state: dict[str, Any], target_platform: str | None = None) -
 
 def _dns(state: dict[str, Any]) -> dict[str, Any]:
     dns = state.get("dns", {})
+    rules = state.get("rules", {})
+    dns_rules: list[dict[str, Any]] = []
+    _append_dns_rule(dns_rules, "domain", rules.get("domains"), "cloudflare")
+    _append_dns_rule(dns_rules, "domain_suffix", rules.get("domain_suffixes"), "cloudflare")
+    _append_dns_rule(dns_rules, "domain_keyword", rules.get("domain_keywords"), "cloudflare")
     return {
         "servers": [
             {
-                "type": "udp",
+                "type": "local",
+                "tag": "local",
+            },
+            {
+                "type": dns.get("server_type", "tcp"),
                 "tag": "cloudflare",
                 "server": dns.get("server", "1.1.1.1"),
+                "server_port": int(dns.get("server_port", 53)),
             },
             {
-                "type": "udp",
+                "type": dns.get("fallback_server_type", "tcp"),
                 "tag": "google",
                 "server": dns.get("fallback_server", "8.8.8.8"),
+                "server_port": int(dns.get("fallback_server_port", 53)),
             },
         ],
-        "rules": [
-            {
-                "query_type": ["A", "AAAA"],
-                "server": "cloudflare",
-            }
-        ],
-        "final": "cloudflare",
+        "rules": dns_rules,
+        "final": dns.get("final", "local"),
         "strategy": dns.get("strategy", "prefer_ipv4"),
         "cache_capacity": int(dns.get("cache_capacity", 4096)),
     }
@@ -144,6 +150,12 @@ def _append_rule(result: list[dict[str, Any]], key: str, values: list[str] | Non
     clean = sorted({value.strip() for value in values or [] if value.strip()})
     if clean:
         result.append(_route_rule(outbound, **{key: clean}))
+
+
+def _append_dns_rule(result: list[dict[str, Any]], key: str, values: list[str] | None, server: str) -> None:
+    clean = sorted({value.strip() for value in values or [] if value.strip()})
+    if clean:
+        result.append({key: clean, "server": server})
 
 
 def _route_rule(outbound: str, **matchers: Any) -> dict[str, Any]:

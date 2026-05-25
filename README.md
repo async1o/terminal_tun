@@ -534,6 +534,17 @@ uv run terminal-tun run
 
 The generated config includes DNS hijacking for TUN mode.
 
+### Internet drops after DNS timeout bursts
+
+If logs show many `dns: exchange failed ... context deadline exceeded` lines, restart after updating to the latest version:
+
+```powershell
+terminal-tun bg stop
+terminal-tun bg start
+```
+
+The default DNS layout keeps general traffic on the local/system resolver and sends profile domains to public TCP DNS. This avoids making the whole machine depend on UDP/53 to one external resolver.
+
 ### YouTube works, Telegram or ChatGPT does not
 
 This is usually an exit-node issue. Pick another node manually instead of `auto`.
