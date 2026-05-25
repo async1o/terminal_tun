@@ -47,6 +47,20 @@ It is built for the exact workflow where you want to clone a repo on Windows or 
 | `all` | All traffic goes through VPN, private LAN addresses stay direct. |
 | `direct` | Proxy routing is disabled. |
 
+`mode set` can also apply a saved profile by name:
+
+```bash
+uv run terminal-tun mode set all
+uv run terminal-tun mode set openai-google-telegram-pubg
+uv run terminal-tun mode list
+```
+
+If background VPN is already running, `mode set` restarts it automatically with the new generated config. Use `--no-restart` when you only want to update saved state:
+
+```bash
+uv run terminal-tun mode set openai-google-telegram-pubg --no-restart
+```
+
 ## 🚀 Quick Start
 
 ```bash

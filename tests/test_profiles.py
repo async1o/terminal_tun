@@ -59,6 +59,22 @@ class ProfileCliTests(unittest.TestCase):
         self.assertIn("googlevideo", state["rules"]["domain_keywords"])
         self.assertIn("chrome.exe", state["rules"]["process_names"])
 
+    def test_mode_set_can_select_builtin_mode_or_profile(self):
+        self.assertEqual(self.run_cli("init"), 0)
+        self.assertEqual(self.run_cli("profile", "create", "work", "--domain", "chatgpt.com"), 0)
+        self.assertEqual(self.run_cli("mode", "set", "work", "--no-restart"), 0)
+
+        state = load_state()
+        self.assertEqual(state["active_profile"], "work")
+        self.assertEqual(state["mode"], "rules")
+        self.assertIn("chatgpt.com", state["rules"]["domain_suffixes"])
+
+        self.assertEqual(self.run_cli("mode", "set", "all", "--no-restart"), 0)
+        state = load_state()
+        self.assertIsNone(state["active_profile"])
+        self.assertEqual(state["mode"], "all")
+        self.assertEqual(self.run_cli("mode", "list"), 0)
+
     def test_template_alias_and_saved_profile_mutation(self):
         self.assertEqual(self.run_cli("init"), 0)
         self.assertEqual(self.run_cli("template", "create", "streaming", "--domain", "youtube.com"), 0)

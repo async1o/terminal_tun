@@ -59,8 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     mode = sub.add_parser("mode", help="Show or change routing mode.")
     mode_sub = mode.add_subparsers(dest="mode_command", required=True)
     mode_sub.add_parser("show", help="Show current mode.")
-    mode_set = mode_sub.add_parser("set", help="Set routing mode.")
-    mode_set.add_argument("mode", choices=["rules", "all", "direct"])
+    mode_sub.add_parser("list", help="List built-in modes and saved profiles.")
+    mode_set = mode_sub.add_parser("set", help="Set routing mode or apply a profile by name.")
+    mode_set.add_argument("target", help="Built-in mode: rules/all/direct, or a saved profile name.")
+    mode_set.add_argument("--no-restart", action="store_true", help="Do not restart background VPN automatically.")
 
     select = sub.add_parser("select", help="Select default proxy outbound by tag or unique name fragment.")
     select.add_argument("target", nargs="?")
@@ -255,12 +257,43 @@ def cmd_status() -> int:
 def cmd_mode(args: argparse.Namespace) -> int:
     state = load_state()
     if args.mode_command == "show":
-        print(state.get("mode", "rules"))
+        active_profile = state.get("active_profile")
+        if active_profile:
+            print(f"{state.get('mode', 'rules')} ({active_profile})")
+        else:
+            print(state.get("mode", "rules"))
         return 0
-    state["mode"] = args.mode
-    state["active_profile"] = None
-    save_state(state)
-    print(f"mode set: {args.mode}")
+    if args.mode_command == "list":
+        print("built-in modes:")
+        print("  rules")
+        print("  all")
+        print("  direct")
+        profiles = state.get("profiles", {})
+        print("profiles:")
+        if profiles:
+            active = state.get("active_profile")
+            for name in sorted(profiles):
+                marker = "*" if name == active else " "
+                print(f"{marker} {name}")
+        else:
+            print("  -")
+        return 0
+
+    target = args.target
+    if target in {"rules", "all", "direct"}:
+        state["mode"] = target
+        state["active_profile"] = None
+        save_state(state)
+        print(f"mode set: {target}")
+    else:
+        profile = _get_profile(state, target)
+        state["rules"] = _copy_rules(profile.get("rules", {}))
+        state["mode"] = profile.get("mode", "rules")
+        state["active_profile"] = target
+        save_state(state)
+        print(f"profile applied: {target}")
+
+    _restart_background_after_config_change(state, no_restart=args.no_restart)
     return 0
 
 
@@ -375,6 +408,7 @@ def cmd_profile(args: argparse.Namespace) -> int:
         state["active_profile"] = args.name
         save_state(state)
         print(f"profile applied: {args.name}")
+        _restart_background_after_config_change(state)
         return 0
 
     if command in {"delete", "remove"}:
@@ -885,6 +919,19 @@ def _sync_active_profile_rules(state: dict[str, Any], name: str) -> None:
     profile = _get_profile(state, name)
     state["rules"] = _copy_rules(profile.get("rules", {}))
     state["mode"] = profile.get("mode", "rules")
+
+
+def _restart_background_after_config_change(state: dict[str, Any], no_restart: bool = False) -> None:
+    if no_restart:
+        return
+    running, old_pid, _pid_file, _log_file = background_status()
+    if not running:
+        return
+    stopped_pid = stop_background()
+    new_pid, config_path, log_file = start_background(state)
+    print(f"background restarted: pid={stopped_pid} -> {new_pid}")
+    print(f"config: {config_path}")
+    print(f"log: {log_file}")
 
 
 def _domain_rule_count(rules: dict[str, Any]) -> int:
