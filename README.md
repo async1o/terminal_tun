@@ -353,6 +353,41 @@ uv run terminal-tun run
 
 Private LAN IPs stay direct, so local network traffic is not forced into the tunnel.
 
+## 💤 Background Mode
+
+Run VPN in the background so the terminal window can be closed:
+
+```powershell
+uv run terminal-tun background start
+```
+
+Short alias:
+
+```powershell
+uv run terminal-tun bg start
+```
+
+Check status:
+
+```powershell
+uv run terminal-tun bg status
+```
+
+Stop background VPN:
+
+```powershell
+uv run terminal-tun bg stop
+```
+
+Logs are written to the app data directory:
+
+```text
+Windows: %LOCALAPPDATA%\terminal-tun\sing-box.log
+Linux: ~/.local/share/terminal-tun/sing-box.log
+```
+
+TUN mode still needs elevated permissions. On Windows, start background mode from PowerShell or Windows Terminal opened as Administrator.
+
 ## 🚀 Autostart
 
 Windows, current user:

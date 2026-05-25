@@ -47,7 +47,7 @@ def _module_command() -> list[str]:
 
 
 def _install_windows(system: bool) -> Path:
-    command = _module_command()
+    command = [sys.executable, "-m", "terminal_tun", "background", "start"]
     if system:
         task_command = " ".join(_windows_quote(part) for part in command)
         result = subprocess.run(
@@ -73,7 +73,7 @@ def _install_windows(system: bool) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "@echo off\r\n"
-        f'start "{SERVICE_NAME}" /min {_windows_quote(command[0])} -m terminal_tun run\r\n',
+        f'start "{SERVICE_NAME}" /min {_windows_quote(command[0])} -m terminal_tun background start\r\n',
         encoding="utf-8",
     )
     return path

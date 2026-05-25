@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .autostart import autostart_status, install_autostart, remove_autostart
+from .background import background_status, start_background, stop_background
 from .core import check_config, find_core, install_core, run_core
 from .errors import TerminalTunError
 from .paths import generated_config_path, state_path
@@ -173,6 +174,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--config", type=Path)
     run.add_argument("extra", nargs=argparse.REMAINDER)
 
+    background = sub.add_parser("background", aliases=["bg"], help="Run or stop VPN in the background.")
+    background_sub = background.add_subparsers(dest="background_command", required=True)
+    bg_start = background_sub.add_parser("start", help="Generate config and start sing-box without keeping the terminal open.")
+    bg_start.add_argument("extra", nargs=argparse.REMAINDER)
+    background_sub.add_parser("stop", help="Stop the background sing-box process.")
+    background_sub.add_parser("status", help="Show background process status.")
+
     autostart = sub.add_parser("autostart", aliases=["service"], help="Install/remove autostart.")
     autostart_sub = autostart.add_subparsers(dest="autostart_command", required=True)
     auto_install = autostart_sub.add_parser("install")
@@ -213,6 +221,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return cmd_core(args)
     if args.command == "run":
         return cmd_run(args)
+    if args.command in {"background", "bg"}:
+        return cmd_background(args)
     if args.command in {"autostart", "service"}:
         return cmd_autostart(args)
     raise TerminalTunError(f"Unknown command: {args.command}")
@@ -752,6 +762,30 @@ def cmd_run(args: argparse.Namespace) -> int:
         config_path = write_config(state)
     core_path = find_core(state)
     return run_core(core_path, config_path, _clean_extra(args.extra))
+
+
+def cmd_background(args: argparse.Namespace) -> int:
+    if args.background_command == "start":
+        state = load_state()
+        pid, config_path, log_file = start_background(state, _clean_extra(args.extra))
+        print(f"background started: pid={pid}")
+        print(f"config: {config_path}")
+        print(f"log: {log_file}")
+        return 0
+    if args.background_command == "stop":
+        pid = stop_background()
+        print(f"background stopped: pid={pid}")
+        return 0
+    if args.background_command == "status":
+        running, pid, pid_file, log_file = background_status()
+        if running:
+            print(f"running: pid={pid}")
+        else:
+            print("not running")
+        print(f"pid file: {pid_file}")
+        print(f"log: {log_file}")
+        return 0
+    raise TerminalTunError(f"Unknown background command: {args.background_command}")
 
 
 def cmd_autostart(args: argparse.Namespace) -> int:

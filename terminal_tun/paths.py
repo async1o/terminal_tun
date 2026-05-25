@@ -48,5 +48,13 @@ def generated_config_path() -> Path:
     return config_dir() / "sing-box.json"
 
 
+def pid_path() -> Path:
+    return config_dir() / "sing-box.pid"
+
+
 def bin_dir() -> Path:
     return data_dir() / "bin"
+
+
+def log_path() -> Path:
+    return data_dir() / "sing-box.log"

@@ -71,6 +71,11 @@ class ProfileCliTests(unittest.TestCase):
         self.assertIn("googlevideo.com", state["rules"]["domain_suffixes"])
         self.assertNotIn("youtube.com", state["rules"]["domain_suffixes"])
 
+    def test_background_status_without_process(self):
+        self.assertEqual(self.run_cli("init"), 0)
+        self.assertEqual(self.run_cli("background", "status"), 0)
+        self.assertEqual(self.run_cli("bg", "status"), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
