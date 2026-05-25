@@ -70,6 +70,16 @@ class SingBoxConfigTests(unittest.TestCase):
         self.assertIn({"ip_is_private": True, "port": 7680, "action": "reject"}, config["route"]["rules"])
         self.assertIn({"network": "udp", "port": 443, "action": "reject"}, config["route"]["rules"])
 
+    def test_generate_windows_config_respects_lower_mtu(self):
+        state = copy.deepcopy(DEFAULT_STATE)
+        state["tun"]["mtu"] = 1400
+        state["outbounds"] = {}
+        add_outbound(state, "node", {"type": "socks", "server": "127.0.0.1", "server_port": 1080}, "manual")
+
+        config = generate_config(state, target_platform="windows")
+
+        self.assertEqual(config["inbounds"][1]["mtu"], 1400)
+
 
 if __name__ == "__main__":
     unittest.main()

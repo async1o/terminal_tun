@@ -456,6 +456,25 @@ That is usually Windows Delivery Optimization on the local network. The config r
 
 The config rejects UDP/443 by default so Chrome/Edge fall back from QUIC/HTTP3 to TCP HTTPS. If a specific node is still slow, switch servers.
 
+### Logs show `tls: bad record MAC`
+
+This usually means one TLS stream was corrupted, truncated, or closed badly by the selected exit node. A single line is usually harmless.
+
+If it happens often and pages break, lower TUN MTU and restart:
+
+```bash
+uv run terminal-tun tun mtu 1400
+uv run terminal-tun config check
+uv run terminal-tun run
+```
+
+If it still happens, try `1280` or switch to another node:
+
+```bash
+uv run terminal-tun tun mtu 1280
+uv run terminal-tun select main-21
+```
+
 ## 🧪 Development
 
 Run tests:

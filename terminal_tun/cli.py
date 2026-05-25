@@ -49,6 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("init", help="Create the local state file.")
     sub.add_parser("status", help="Show current configuration summary.")
 
+    tun = sub.add_parser("tun", help="Inspect or change TUN settings.")
+    tun_sub = tun.add_subparsers(dest="tun_command", required=True)
+    tun_sub.add_parser("show", help="Show current TUN settings.")
+    tun_mtu = tun_sub.add_parser("mtu", help="Show or set TUN MTU.")
+    tun_mtu.add_argument("value", nargs="?", type=int)
+
     mode = sub.add_parser("mode", help="Show or change routing mode.")
     mode_sub = mode.add_subparsers(dest="mode_command", required=True)
     mode_sub.add_parser("show", help="Show current mode.")
@@ -152,6 +158,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return 0
     if args.command == "status":
         return cmd_status()
+    if args.command == "tun":
+        return cmd_tun(args)
     if args.command == "mode":
         return cmd_mode(args)
     if args.command == "select":
@@ -205,6 +213,29 @@ def cmd_mode(args: argparse.Namespace) -> int:
     save_state(state)
     print(f"mode set: {args.mode}")
     return 0
+
+
+def cmd_tun(args: argparse.Namespace) -> int:
+    state = load_state()
+    tun = state.setdefault("tun", {})
+    if args.tun_command == "show":
+        print(f"enabled: {tun.get('enabled', True)}")
+        print(f"interface_name: {tun.get('interface_name', 'terminaltun0')}")
+        print(f"address: {tun.get('address', '172.28.0.1/30')}")
+        print(f"mtu: {tun.get('mtu', 9000)}")
+        print(f"strict_route: {tun.get('strict_route', True)}")
+        return 0
+    if args.tun_command == "mtu":
+        if args.value is None:
+            print(tun.get("mtu", 9000))
+            return 0
+        if args.value < 576 or args.value > 9000:
+            raise TerminalTunError("MTU must be between 576 and 9000.")
+        tun["mtu"] = args.value
+        save_state(state)
+        print(f"tun mtu set: {args.value}")
+        return 0
+    raise TerminalTunError(f"Unknown tun command: {args.tun_command}")
 
 
 def cmd_select(args: argparse.Namespace) -> int:
