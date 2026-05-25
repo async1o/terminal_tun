@@ -270,6 +270,55 @@ Remove a domain rule:
 uv run terminal-tun rule domain remove youtube.com
 ```
 
+## 🧩 Config Profiles
+
+Profiles are named routing configs. Each profile stores its own mode plus domain/app rules, so you can switch between presets without retyping domains.
+
+Create a profile for specific domains:
+
+```bash
+uv run terminal-tun profile create work --domain chatgpt.com --domain openai.com --domain api.openai.com
+uv run terminal-tun profile apply work
+uv run terminal-tun run
+```
+
+Create a streaming profile:
+
+```bash
+uv run terminal-tun profile create streaming --domain youtube.com --domain googlevideo.com --keyword ytimg
+uv run terminal-tun profile apply streaming
+```
+
+Save the current active rules as a reusable profile:
+
+```bash
+uv run terminal-tun profile save my-current-config --description "My current domain/app routing"
+```
+
+Edit a saved profile:
+
+```bash
+uv run terminal-tun profile add-domain work chatgpt.com
+uv run terminal-tun profile add-app work chrome.exe
+uv run terminal-tun profile remove-domain work openai.com
+```
+
+List, inspect, switch, or delete profiles:
+
+```bash
+uv run terminal-tun profile list
+uv run terminal-tun profile show work
+uv run terminal-tun profile apply streaming
+uv run terminal-tun profile delete old-config
+```
+
+`template` is an alias for `profile`, so these commands are equivalent:
+
+```bash
+uv run terminal-tun template create work --domain chatgpt.com
+uv run terminal-tun template apply work
+```
+
 ## 🧠 App Rules
 
 Route by process name:

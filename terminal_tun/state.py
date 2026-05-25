@@ -17,8 +17,10 @@ DEFAULT_STATE: dict[str, Any] = {
     "version": STATE_VERSION,
     "mode": "rules",
     "selected_outbound": None,
+    "active_profile": None,
     "subscriptions": {},
     "outbounds": {},
+    "profiles": {},
     "rules": {
         "domains": [],
         "domain_suffixes": [],

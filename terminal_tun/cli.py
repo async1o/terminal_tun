@@ -64,6 +64,41 @@ def build_parser() -> argparse.ArgumentParser:
     select = sub.add_parser("select", help="Select default proxy outbound by tag or unique name fragment.")
     select.add_argument("target", nargs="?")
 
+    profile = sub.add_parser("profile", aliases=["template"], help="Manage routing config profiles.")
+    profile_sub = profile.add_subparsers(dest="profile_command", required=True)
+    profile_sub.add_parser("list", help="List saved routing profiles.")
+    profile_show = profile_sub.add_parser("show", help="Show one routing profile.")
+    profile_show.add_argument("name")
+    profile_save = profile_sub.add_parser("save", help="Save current mode and routing rules as a profile.")
+    profile_save.add_argument("name")
+    profile_save.add_argument("--description", default="")
+    profile_create = profile_sub.add_parser("create", help="Create a profile from command-line domain/app rules.")
+    profile_create.add_argument("name")
+    profile_create.add_argument("--description", default="")
+    profile_create.add_argument("--domain", action="append", default=[])
+    profile_create.add_argument("--full-domain", action="append", default=[])
+    profile_create.add_argument("--keyword", action="append", default=[])
+    profile_create.add_argument("--app", action="append", default=[])
+    profile_create.add_argument("--process-path", action="append", default=[])
+    profile_apply = profile_sub.add_parser("apply", aliases=["use"], help="Apply a saved profile to active routing rules.")
+    profile_apply.add_argument("name")
+    profile_delete = profile_sub.add_parser("delete", aliases=["remove"], help="Delete a saved profile.")
+    profile_delete.add_argument("name")
+    profile_add_domain = profile_sub.add_parser("add-domain", help="Add a domain rule to a saved profile.")
+    profile_add_domain.add_argument("name")
+    profile_add_domain.add_argument("value")
+    profile_add_domain.add_argument("--kind", choices=["auto", "full", "suffix", "keyword"], default="auto")
+    profile_remove_domain = profile_sub.add_parser("remove-domain", help="Remove a domain rule from a saved profile.")
+    profile_remove_domain.add_argument("name")
+    profile_remove_domain.add_argument("value")
+    profile_add_app = profile_sub.add_parser("add-app", help="Add an app/process rule to a saved profile.")
+    profile_add_app.add_argument("name")
+    profile_add_app.add_argument("value")
+    profile_add_app.add_argument("--path", action="store_true")
+    profile_remove_app = profile_sub.add_parser("remove-app", help="Remove an app/process rule from a saved profile.")
+    profile_remove_app.add_argument("name")
+    profile_remove_app.add_argument("value")
+
     subscription = sub.add_parser("subscription", aliases=["sub"], help="Manage subscriptions.")
     subscription_sub = subscription.add_subparsers(dest="subscription_command", required=True)
     sub_add = subscription_sub.add_parser("add", help="Add and sync a subscription URL.")
@@ -164,6 +199,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return cmd_mode(args)
     if args.command == "select":
         return cmd_select(args)
+    if args.command in {"profile", "template"}:
+        return cmd_profile(args)
     if args.command in {"subscription", "sub"}:
         return cmd_subscription(args)
     if args.command == "server":
@@ -191,6 +228,7 @@ def cmd_status() -> int:
     print(f"state: {state_path()}")
     print(f"generated config: {generated_config_path()}")
     print(f"mode: {state.get('mode')}")
+    print(f"active profile: {state.get('active_profile') or '-'}")
     print(f"selected outbound: {selected or '-'}")
     print(f"subscriptions: {len(state['subscriptions'])}")
     print(f"outbounds: {len(state['outbounds'])}")
@@ -210,6 +248,7 @@ def cmd_mode(args: argparse.Namespace) -> int:
         print(state.get("mode", "rules"))
         return 0
     state["mode"] = args.mode
+    state["active_profile"] = None
     save_state(state)
     print(f"mode set: {args.mode}")
     return 0
@@ -253,6 +292,132 @@ def cmd_select(args: argparse.Namespace) -> int:
     save_state(state)
     print(f"selected outbound: {tag}")
     return 0
+
+
+def cmd_profile(args: argparse.Namespace) -> int:
+    state = load_state()
+    profiles = state.setdefault("profiles", {})
+    command = args.profile_command
+
+    if command == "list":
+        if not profiles:
+            print("no profiles")
+            return 0
+        active = state.get("active_profile")
+        for name, profile in sorted(profiles.items()):
+            marker = "*" if name == active else " "
+            rules = profile.get("rules", {})
+            domain_count = _domain_rule_count(rules)
+            app_count = _app_rule_count(rules)
+            description = profile.get("description") or "-"
+            print(f"{marker} {name}: mode={profile.get('mode', 'rules')} domains={domain_count} apps={app_count} description={description}")
+        return 0
+
+    if command == "show":
+        _print_profile(args.name, _get_profile(state, args.name))
+        return 0
+
+    if command == "save":
+        now = utc_now()
+        existing = profiles.get(args.name, {})
+        profiles[args.name] = {
+            "mode": state.get("mode", "rules"),
+            "rules": _copy_rules(state.get("rules", {})),
+            "description": args.description or existing.get("description", ""),
+            "created_at": existing.get("created_at", now),
+            "updated_at": now,
+        }
+        state["active_profile"] = args.name
+        save_state(state)
+        print(f"profile saved: {args.name}")
+        return 0
+
+    if command == "create":
+        if args.name in profiles:
+            raise TerminalTunError(f"Profile already exists: {args.name}")
+        rules = _empty_rules()
+        for value in args.domain:
+            _profile_add_domain(rules, value, "auto")
+        for value in args.full_domain:
+            _profile_add_domain(rules, value, "full")
+        for value in args.keyword:
+            _profile_add_domain(rules, value, "keyword")
+        for value in args.app:
+            _profile_add_app(rules, value, path=False)
+        for value in args.process_path:
+            _profile_add_app(rules, value, path=True)
+        now = utc_now()
+        profiles[args.name] = {
+            "mode": "rules",
+            "rules": rules,
+            "description": args.description,
+            "created_at": now,
+            "updated_at": now,
+        }
+        save_state(state)
+        print(f"profile created: {args.name}")
+        return 0
+
+    if command in {"apply", "use"}:
+        profile = _get_profile(state, args.name)
+        state["rules"] = _copy_rules(profile.get("rules", {}))
+        state["mode"] = profile.get("mode", "rules")
+        state["active_profile"] = args.name
+        save_state(state)
+        print(f"profile applied: {args.name}")
+        return 0
+
+    if command in {"delete", "remove"}:
+        if args.name not in profiles:
+            raise TerminalTunError(f"Unknown profile: {args.name}")
+        del profiles[args.name]
+        if state.get("active_profile") == args.name:
+            state["active_profile"] = None
+        save_state(state)
+        print(f"profile deleted: {args.name}")
+        return 0
+
+    if command == "add-domain":
+        profile = _get_profile(state, args.name)
+        rules = profile.setdefault("rules", _empty_rules())
+        key, value = _profile_add_domain(rules, args.value, args.kind)
+        profile["updated_at"] = utc_now()
+        _sync_active_profile_rules(state, args.name)
+        save_state(state)
+        print(f"profile domain added: {args.name} {value} ({key})")
+        return 0
+
+    if command == "remove-domain":
+        profile = _get_profile(state, args.name)
+        rules = profile.setdefault("rules", _empty_rules())
+        removed = _profile_remove_domain(rules, args.value)
+        profile["updated_at"] = utc_now()
+        _sync_active_profile_rules(state, args.name)
+        save_state(state)
+        print(f"profile domain rules removed: {removed}")
+        return 0
+
+    if command == "add-app":
+        profile = _get_profile(state, args.name)
+        rules = profile.setdefault("rules", _empty_rules())
+        key, value = _profile_add_app(rules, args.value, args.path)
+        profile["updated_at"] = utc_now()
+        _sync_active_profile_rules(state, args.name)
+        save_state(state)
+        print(f"profile app added: {args.name} {value} ({key})")
+        return 0
+
+    if command == "remove-app":
+        profile = _get_profile(state, args.name)
+        rules = profile.setdefault("rules", _empty_rules())
+        removed = _profile_remove_app(rules, args.value)
+        profile["updated_at"] = utc_now()
+        _sync_active_profile_rules(state, args.name)
+        save_state(state)
+        print(f"profile app rules removed: {removed}")
+        return 0
+
+    raise TerminalTunError(f"Unknown profile command: {command}")
 
 
 def cmd_subscription(args: argparse.Namespace) -> int:
@@ -478,6 +643,7 @@ def _cmd_domain_rule(state: dict[str, Any], args: argparse.Namespace) -> int:
     if args.domain_command == "add":
         key, value = _domain_bucket(args.value, args.kind)
         _add_unique(rules[key], value)
+        state["active_profile"] = None
         save_state(state)
         print(f"domain rule added: {value} ({key})")
         return 0
@@ -485,6 +651,7 @@ def _cmd_domain_rule(state: dict[str, Any], args: argparse.Namespace) -> int:
         removed = 0
         for key in ["domains", "domain_suffixes", "domain_keywords"]:
             removed += _remove_value(rules[key], args.value)
+        state["active_profile"] = None
         save_state(state)
         print(f"domain rules removed: {removed}")
         return 0
@@ -502,12 +669,14 @@ def _cmd_app_rule(state: dict[str, Any], args: argparse.Namespace) -> int:
         value = args.value.strip()
         key = "process_paths" if args.path or "/" in value or "\\" in value else "process_names"
         _add_unique(rules[key], value)
+        state["active_profile"] = None
         save_state(state)
         print(f"app rule added: {value} ({key})")
         return 0
     if args.app_command == "remove":
         removed = _remove_value(rules["process_names"], args.value)
         removed += _remove_value(rules["process_paths"], args.value)
+        state["active_profile"] = None
         save_state(state)
         print(f"app rules removed: {removed}")
         return 0
@@ -603,6 +772,93 @@ def cmd_autostart(args: argparse.Namespace) -> int:
 def _add_unique(values: list[str], value: str) -> None:
     if value not in values:
         values.append(value)
+
+
+def _empty_rules() -> dict[str, list[str]]:
+    return {
+        "domains": [],
+        "domain_suffixes": [],
+        "domain_keywords": [],
+        "process_names": [],
+        "process_paths": [],
+    }
+
+
+def _copy_rules(rules: dict[str, Any]) -> dict[str, list[str]]:
+    copied = _empty_rules()
+    for key in copied:
+        values = rules.get(key, [])
+        if isinstance(values, list):
+            copied[key] = [str(value) for value in values]
+    return copied
+
+
+def _get_profile(state: dict[str, Any], name: str) -> dict[str, Any]:
+    profile = state.setdefault("profiles", {}).get(name)
+    if not isinstance(profile, dict):
+        raise TerminalTunError(f"Unknown profile: {name}")
+    profile["rules"] = _copy_rules(profile.get("rules", {}))
+    profile["mode"] = profile.get("mode", "rules")
+    return profile
+
+
+def _print_profile(name: str, profile: dict[str, Any]) -> None:
+    print(f"profile: {name}")
+    print(f"mode: {profile.get('mode', 'rules')}")
+    print(f"description: {profile.get('description') or '-'}")
+    print(f"created_at: {profile.get('created_at') or '-'}")
+    print(f"updated_at: {profile.get('updated_at') or '-'}")
+    rules = _copy_rules(profile.get("rules", {}))
+    _print_values("domains", rules["domains"])
+    _print_values("domain_suffixes", rules["domain_suffixes"])
+    _print_values("domain_keywords", rules["domain_keywords"])
+    _print_values("process_names", rules["process_names"])
+    _print_values("process_paths", rules["process_paths"])
+
+
+def _profile_add_domain(rules: dict[str, list[str]], value: str, kind: str) -> tuple[str, str]:
+    key, normalized = _domain_bucket(value, kind)
+    _add_unique(rules[key], normalized)
+    return key, normalized
+
+
+def _profile_remove_domain(rules: dict[str, list[str]], value: str) -> int:
+    removed = 0
+    normalized = value.strip().lower()
+    for key in ["domains", "domain_suffixes", "domain_keywords"]:
+        removed += _remove_value(rules[key], normalized)
+    return removed
+
+
+def _profile_add_app(rules: dict[str, list[str]], value: str, path: bool) -> tuple[str, str]:
+    normalized = value.strip()
+    if not normalized:
+        raise TerminalTunError("App value is empty.")
+    key = "process_paths" if path or "/" in normalized or "\\" in normalized else "process_names"
+    _add_unique(rules[key], normalized)
+    return key, normalized
+
+
+def _profile_remove_app(rules: dict[str, list[str]], value: str) -> int:
+    removed = _remove_value(rules["process_names"], value)
+    removed += _remove_value(rules["process_paths"], value)
+    return removed
+
+
+def _sync_active_profile_rules(state: dict[str, Any], name: str) -> None:
+    if state.get("active_profile") != name:
+        return
+    profile = _get_profile(state, name)
+    state["rules"] = _copy_rules(profile.get("rules", {}))
+    state["mode"] = profile.get("mode", "rules")
+
+
+def _domain_rule_count(rules: dict[str, Any]) -> int:
+    return sum(len(rules.get(key, [])) for key in ["domains", "domain_suffixes", "domain_keywords"])
+
+
+def _app_rule_count(rules: dict[str, Any]) -> int:
+    return sum(len(rules.get(key, [])) for key in ["process_names", "process_paths"])
 
 
 def _remove_value(values: list[str], value: str) -> int:
